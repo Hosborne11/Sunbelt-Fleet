@@ -14,9 +14,11 @@ import ReportsPage from './pages/ReportsPage'
 import ContactsPage from './pages/ContactsPage'
 import JobsitesPage from './pages/JobsitesPage'
 import CategoriesPage from './pages/CategoriesPage'
+import AuthGate from './components/AuthGate'
 
 export default function App() {
   return (
+    <AuthGate>
     <BrowserRouter>
       <div className="flex h-screen w-screen overflow-hidden">
         <Sidebar />
@@ -40,5 +42,6 @@ export default function App() {
         </main>
       </div>
     </BrowserRouter>
+    </AuthGate>
   )
 }
