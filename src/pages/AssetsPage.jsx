@@ -6,6 +6,7 @@ import { iconFor } from '../lib/categoryIcons'
 import StatusBadge from '../components/StatusBadge'
 import AssetDrawer from '../components/AssetDrawer'
 import MapView from '../components/MapView'
+import { fetchTelematicsByAsset, reportingMeta, timeAgo } from '../lib/telematics'
 
 const VIEWS = [
   { key: 'table', label: 'Table', icon: Table2 },
@@ -16,6 +17,7 @@ export default function AssetsPage() {
   const [assets, setAssets] = useState([])
   const [categories, setCategories] = useState([])
   const [jobsites, setJobsites] = useState([])
+  const [telematics, setTelematics] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('table')
@@ -31,19 +33,21 @@ export default function AssetsPage() {
   async function loadAll() {
     setLoading(true)
     setError(null)
-    const [assetsRes, catRes, jobsiteRes] = await Promise.all([
+    const [assetsRes, catRes, jobsiteRes, telRes] = await Promise.all([
       supabase
         .from('assets')
         .select('*, category:equipment_categories(id,name,icon), jobsite:jobsites(id,name)')
         .order('asset_number'),
       supabase.from('equipment_categories').select('*').order('sort_order'),
       supabase.from('jobsites').select('*').order('name'),
+      fetchTelematicsByAsset(),
     ])
 
     if (assetsRes.error) setError(assetsRes.error.message)
     setAssets(assetsRes.data || [])
     setCategories(catRes.data || [])
     setJobsites(jobsiteRes.data || [])
+    setTelematics(telRes.map)
     setLoading(false)
   }
 
@@ -198,7 +202,7 @@ export default function AssetsPage() {
 
       {view === 'map' && (
         <div className="flex-1 overflow-hidden">
-          <MapView jobsites={jobsites} assets={assets} />
+          <MapView jobsites={jobsites} assets={assets} telematics={telematics} />
         </div>
       )}
 
@@ -230,7 +234,7 @@ export default function AssetsPage() {
 
         {filtered.length > 0 && (
           <div className="overflow-x-auto rounded border border-graphite-800">
-            <table className="w-full min-w-[900px] table-fixed border-collapse text-sm">
+            <table className="w-full min-w-[1020px] table-fixed border-collapse text-sm">
               <colgroup>
                 <col className="w-10" />
                 <col className="w-40" />
@@ -239,6 +243,7 @@ export default function AssetsPage() {
                 <col className="w-40" />
                 <col className="w-48" />
                 <col className="w-28" />
+                <col className="w-32" />
                 <col className="w-20" />
               </colgroup>
               <thead>
@@ -250,6 +255,7 @@ export default function AssetsPage() {
                   <th className="py-2 pr-3 font-medium">Serial #</th>
                   <th className="py-2 pr-3 font-medium">Jobsite</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium">Last report</th>
                   <th className="py-2 pr-3 text-right font-medium">Hours</th>
                 </tr>
               </thead>
@@ -298,6 +304,9 @@ export default function AssetsPage() {
                       <td className="whitespace-nowrap py-2.5 pr-3">
                         <StatusBadge status={a.status} />
                       </td>
+                      <td className="whitespace-nowrap py-2.5 pr-3 text-xs">
+                        <LastReport t={telematics[a.id]} />
+                      </td>
                       <td className="whitespace-nowrap py-2.5 pr-3 text-right font-mono text-ink-500">
                         {a.hour_meter != null ? a.hour_meter.toLocaleString() : '—'}
                       </td>
@@ -322,5 +331,16 @@ export default function AssetsPage() {
         />
       )}
     </div>
+  )
+}
+
+function LastReport({ t }) {
+  if (!t) return <span className="text-ink-500" title="No telematics linked to this serial number">—</span>
+  const meta = reportingMeta(t.reporting_status)
+  return (
+    <span className="flex items-center gap-1.5 text-ink-300" title={meta.label}>
+      <span className={`h-2 w-2 shrink-0 rounded-sm ${meta.dot}`} />
+      {timeAgo(t.last_report_at)}
+    </span>
   )
 }

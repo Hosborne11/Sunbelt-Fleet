@@ -1,58 +1,76 @@
 # Sunbelt Fleet
 
-Internal machine/asset registry for Sunbelt Utilities Corp — v1 of a GoAardvark-style
-tool. This pass builds the core data model: **Assets**, **Jobsites**, and
-**Equipment Categories**. The sidebar has placeholders for Work Orders, Alerts,
-Inspections, Rentals, Leases, and Reports so those modules can slot in later
-against the same asset table.
+Internal machine/asset registry for Sunbelt Utilities Corp, connected to live telematics
+(John Deere Operations Center and Hitachi Global e-Service) running in the same Supabase project.
 
-Stack: React + Vite + Tailwind + Supabase (Postgres), deployed on Vercel —
-same as your other internal tools.
+Stack: React + Vite + Tailwind + Supabase (Postgres + Auth), deployed on Vercel.
 
-## 1. Create the Supabase project
+## How the pieces fit
 
-1. Go to [supabase.com](https://supabase.com) → New project.
-2. Once it's up, open the **SQL Editor** and run everything in
-   `supabase/schema.sql`. That creates the `assets`, `jobsites`, and
-   `equipment_categories` tables and seeds a starter category list.
-3. Go to Project Settings → API and copy the **Project URL** and
-   **anon public key**.
+- **`public` schema**: this app's tables: assets, jobsites, categories, work orders, alerts,
+  inspections, maintenance plans, reservations, rentals, leases, contacts, downtime, hour readings.
+- **`fleet` schema**: the telematics backend (Edge Functions + cron) that pulls Deere and Hitachi data.
+- **The link**: a registry asset links to a telematics unit when the **serial numbers match**,
+  either the full 17-character PIN or just the last digits (e.g. `712264`).
+- **Jobsites are the geofences**: every jobsite with coordinates plus a radius becomes a geofence.
+  Machines reporting inside it are assigned to that jobsite, and their daily hours are credited to it.
+- **Hourly sync** (`fleet-registry-sync`, :05 and :35): updates each linked machine's hour meter,
+  logs daily hour-meter readings, sets the jobsite from its position, and turns machine fault codes
+  into Alerts (source = telematics). Resolving one of those alerts acknowledges the fault.
 
-## 2. Local setup
+## 1. Database (Supabase SQL editor, in this order)
+
+1. `supabase/schema.sql`
+2. `supabase/migrations/002_add_jobsite_coordinates.sql`
+3. `supabase/migrations/003_app_tables.sql`: every module table, locked to signed-in users
+4. `supabase/migrations/004_telematics_link.sql`: serial linking, geofences, sync, views
+
+Then fill the registry:
+
+```sql
+-- If the registry is empty: create an asset for every telematics unit
+select public.seed_assets_from_telematics();
+
+-- If assets were entered by hand: link them by serial number instead
+select public.link_telematics();
+
+-- Load hour meters + the full daily hour history into the registry (once)
+select public.sync_telematics_to_registry(5000);
+
+-- Anything that still isn't linked
+select * from public.unlinked_telematics;
+```
+
+## 2. Sign-in (Supabase Auth)
+
+The app requires a signed-in user; the anon key alone can't read any data.
+
+1. **Authentication → Sign In / Providers**: leave **Email** on; turn **off** "Allow new users to sign up".
+2. **Authentication → URL Configuration**: set **Site URL** to the Vercel URL, and add
+   `http://localhost:5173` and the Vercel URL under **Redirect URLs**.
+3. **Authentication → Users → Invite user** for each person who should have access.
+   They sign in with a one-time email link.
+
+## 3. Local setup
 
 ```bash
 npm install
-cp .env.example .env.local
-# paste your Supabase URL + anon key into .env.local
+cp .env.example .env.local   # paste the anon (publishable) key from Project Settings -> API Keys
 npm run dev
 ```
 
-## 3. Deploy to Vercel
+## 4. Deploy to Vercel
 
-1. Push this repo to GitHub.
-2. In Vercel: New Project → import the repo.
-3. Add the two environment variables from `.env.local`
-   (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) under Project Settings →
-   Environment Variables.
-4. Deploy. Vite's default build command/output (`npm run build` → `dist`)
-   works with no extra config.
+1. Push this repo to GitHub, then in Vercel: New Project, then import the repo.
+2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under Project Settings → Environment Variables.
+3. Deploy (`npm run build` → `dist`, no extra config).
 
-## What's in this pass
+## What's in the app
 
-- **Assets page** (`/`) — the registry table: category icon, asset #, make,
-  model, serial #, jobsite, status, hour meter. Filter by jobsite, category,
-  status, or free-text search. Click a row to edit; "Add asset" opens the
-  same form empty.
-- **Jobsites** (`/jobsites`) and **Categories** (`/categories`) — simple
-  management lists so you're not stuck editing rows directly in the
-  Supabase dashboard.
-- `supabase/schema.sql` — the full table definitions, indexes, and starter
-  category seed data. Comments at the bottom note that Work Orders, Alerts,
-  Inspections, Rentals, and Leases will each get their own table referencing
-  `assets(id)` when those modules get built.
-
-## Notes on scope
-
-Row-level security is enabled but currently open (`using (true)`) since
-there's no login yet — it's meant to be tightened once you add
-authentication (Supabase Auth works well if you want per-user logins later).
+- **Assets** (`/`): registry table with a live "Last report" column, and a Map tab showing jobsite
+  geofences plus every linked machine's current position.
+- **Asset detail** (`/assets/:id`): telematics panel (current jobsite, hours today / 7 days, idle,
+  fuel, DEF, open fault codes, recent trail map, daily usage), plus work orders, alerts, inspections,
+  maintenance plans (due by hours now uses the live hour meter), rentals, leases, downtime, hour history.
+- **Jobsites**: name, address, coordinates, and geofence radius.
+- Work Orders, Alerts, Inspections, Maintenance Plans, Reservations, Rentals, Leases, Reports, Contacts.

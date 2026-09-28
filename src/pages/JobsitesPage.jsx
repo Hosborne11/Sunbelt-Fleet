@@ -8,10 +8,11 @@ export default function JobsitesPage() {
   const [address, setAddress] = useState('')
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
+  const [radius, setRadius] = useState('400')
   const [error, setError] = useState(null)
 
   const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ name: '', address: '', latitude: '', longitude: '' })
+  const [editForm, setEditForm] = useState({ name: '', address: '', latitude: '', longitude: '', radius_m: '' })
 
   async function load() {
     const { data, error: err } = await supabase.from('jobsites').select('*').order('name')
@@ -31,6 +32,7 @@ export default function JobsitesPage() {
       address: address.trim() || null,
       latitude: lat !== '' ? Number(lat) : null,
       longitude: lng !== '' ? Number(lng) : null,
+      radius_m: radius !== '' ? Number(radius) : 400,
     })
     if (err) {
       setError(err.message)
@@ -40,6 +42,7 @@ export default function JobsitesPage() {
     setAddress('')
     setLat('')
     setLng('')
+    setRadius('400')
     load()
   }
 
@@ -56,6 +59,7 @@ export default function JobsitesPage() {
       address: j.address || '',
       latitude: j.latitude ?? '',
       longitude: j.longitude ?? '',
+      radius_m: j.radius_m ?? 400,
     })
   }
 
@@ -72,6 +76,7 @@ export default function JobsitesPage() {
         address: editForm.address.trim() || null,
         latitude: editForm.latitude !== '' ? Number(editForm.latitude) : null,
         longitude: editForm.longitude !== '' ? Number(editForm.longitude) : null,
+        radius_m: editForm.radius_m !== '' ? Number(editForm.radius_m) : 400,
       })
       .eq('id', id)
     if (err) {
@@ -87,7 +92,9 @@ export default function JobsitesPage() {
       <h1 className="text-xl font-semibold text-ink-100">Jobsites</h1>
       <p className="mt-1 text-sm text-ink-500">
         Sites assets can be assigned to — properties, projects, or the yard. Add coordinates to
-        plot a jobsite on the Map tab. Click a jobsite below to edit it.
+        plot a jobsite on the Map tab. Coordinates plus a radius also make the jobsite a geofence:
+        machines reporting inside it are assigned to it automatically, and their daily hours are
+        credited to it.
       </p>
 
       <form onSubmit={addJobsite} className="mt-6 space-y-2">
@@ -121,6 +128,16 @@ export default function JobsitesPage() {
             type="number"
             step="any"
             className="input flex-1 font-mono"
+          />
+          <input
+            value={radius}
+            onChange={(e) => setRadius(e.target.value)}
+            placeholder="Radius (m)"
+            title="Geofence radius in meters"
+            type="number"
+            min="50"
+            step="50"
+            className="input w-28 font-mono"
           />
           <button
             type="submit"
@@ -171,6 +188,16 @@ export default function JobsitesPage() {
                   className="input flex-1 font-mono"
                   placeholder="Longitude"
                 />
+                <input
+                  value={editForm.radius_m}
+                  onChange={(e) => setEditForm((f) => ({ ...f, radius_m: e.target.value }))}
+                  type="number"
+                  min="50"
+                  step="50"
+                  title="Geofence radius in meters"
+                  className="input w-28 font-mono"
+                  placeholder="Radius (m)"
+                />
                 <button
                   onClick={() => saveEdit(j.id)}
                   className="flex items-center gap-1 rounded bg-amber-400 px-3 py-2 text-sm font-medium text-graphite-950 hover:bg-amber-400/90"
@@ -192,7 +219,8 @@ export default function JobsitesPage() {
                 {j.address && <div className="text-xs text-ink-500">{j.address}</div>}
                 {j.latitude != null && j.longitude != null && (
                   <div className="font-mono text-xs text-ink-500">
-                    {Number(j.latitude).toFixed(4)}, {Number(j.longitude).toFixed(4)}
+                    {Number(j.latitude).toFixed(4)}, {Number(j.longitude).toFixed(4)}, {j.radius_m ?? 400} m
+                    geofence
                   </div>
                 )}
               </div>
