@@ -250,8 +250,13 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
                 type="number"
                 value={form.hour_meter}
                 onChange={(e) => set('hour_meter', e.target.value)}
-                className="input font-mono"
+                readOnly={!!asset?.telematics_asset_id}
+                title={asset?.telematics_asset_id ? 'Updated automatically from telematics' : undefined}
+                className={`input font-mono ${asset?.telematics_asset_id ? 'cursor-not-allowed opacity-60' : ''}`}
               />
+              {asset?.telematics_asset_id && (
+                <p className="mt-1 text-xs text-ink-500">Updated automatically from telematics.</p>
+              )}
             </Field>
             <Field label="Odometer">
               <input
