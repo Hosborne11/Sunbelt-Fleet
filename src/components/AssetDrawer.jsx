@@ -12,6 +12,7 @@ const EMPTY = {
   year: '',
   serial_number: '',
   jobsite_id: '',
+  crew_id: '',
   status: 'active',
   hour_meter: '',
   odometer: '',
@@ -27,6 +28,12 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
   const [form, setForm] = useState(EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [crews, setCrews] = useState([])
+
+  useEffect(() => {
+    supabase.from('crews').select('id, name').eq('active', true).order('sort_order')
+      .then(({ data }) => setCrews(data || []))
+  }, [])
 
   useEffect(() => {
     if (asset) {
@@ -35,6 +42,7 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
         ...asset,
         category_id: asset.category_id || '',
         jobsite_id: asset.jobsite_id || '',
+        crew_id: asset.crew_id || '',
         year: asset.year ?? '',
         hour_meter: asset.hour_meter ?? '',
         odometer: asset.odometer ?? '',
@@ -76,6 +84,7 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
       year: form.year ? Number(form.year) : null,
       serial_number: form.serial_number.trim() || null,
       jobsite_id: form.jobsite_id || null,
+      crew_id: form.crew_id || null,
       status: form.status,
       hour_meter: newHourMeter,
       odometer: form.odometer !== '' ? Number(form.odometer) : null,
@@ -244,14 +253,30 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
             </select>
           </Field>
 
+          <Field label="Crew">
+            <select value={form.crew_id} onChange={(e) => set('crew_id', e.target.value)} className="input">
+              <option value="">Not assigned</option>
+              {crews.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} crew
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Hour meter">
               <input
                 type="number"
                 value={form.hour_meter}
                 onChange={(e) => set('hour_meter', e.target.value)}
-                className="input font-mono"
+                readOnly={!!asset?.telematics_asset_id}
+                title={asset?.telematics_asset_id ? 'Updated automatically from telematics' : undefined}
+                className={`input font-mono ${asset?.telematics_asset_id ? 'cursor-not-allowed opacity-60' : ''}`}
               />
+              {asset?.telematics_asset_id && (
+                <p className="mt-1 text-xs text-ink-500">Updated automatically from telematics.</p>
+              )}
             </Field>
             <Field label="Odometer">
               <input

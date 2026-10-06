@@ -25,6 +25,7 @@ import InspectionDrawer from '../components/InspectionDrawer'
 import RentalDrawer from '../components/RentalDrawer'
 import LeaseDrawer from '../components/LeaseDrawer'
 import MaintenancePlanDrawer from '../components/MaintenancePlanDrawer'
+import TelematicsPanel from '../components/TelematicsPanel'
 
 export default function AssetDetailPage() {
   const { id } = useParams()
@@ -42,6 +43,9 @@ export default function AssetDetailPage() {
   const [plans, setPlans] = useState([])
   const [downtimeEvents, setDowntimeEvents] = useState([])
   const [hourReadings, setHourReadings] = useState([])
+  const [telematics, setTelematics] = useState(null)
+  const [usage, setUsage] = useState([])
+  const [trail, setTrail] = useState([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -63,10 +67,13 @@ export default function AssetDetailPage() {
       plansRes,
       downtimeRes,
       hourRes,
+      telRes,
+      usageRes,
+      trailRes,
     ] = await Promise.all([
       supabase
         .from('assets')
-        .select('*, category:equipment_categories(id,name,icon), jobsite:jobsites(id,name)')
+        .select('*, category:equipment_categories(id,name,icon), jobsite:jobsites(id,name), crew:crews(id,name)')
         .eq('id', id)
         .maybeSingle(),
       supabase.from('equipment_categories').select('*').order('sort_order'),
@@ -97,6 +104,19 @@ export default function AssetDetailPage() {
         .eq('asset_id', id)
         .order('reading_date', { ascending: false })
         .limit(20),
+      supabase.from('asset_telematics').select('*').eq('asset_id', id).maybeSingle(),
+      supabase
+        .from('asset_daily_usage')
+        .select('*')
+        .eq('asset_id', id)
+        .order('reading_date', { ascending: false })
+        .limit(30),
+      supabase
+        .from('asset_location_history')
+        .select('recorded_at, lat, lng')
+        .eq('asset_id', id)
+        .order('recorded_at', { ascending: true })
+        .limit(1000),
     ])
 
     if (!assetRes.data) {
@@ -117,6 +137,9 @@ export default function AssetDetailPage() {
     setPlans(plansRes.data || [])
     setDowntimeEvents(downtimeRes.data || [])
     setHourReadings(hourRes.data || [])
+    setTelematics(telRes.data || null)
+    setUsage(usageRes.data || [])
+    setTrail(trailRes.data || [])
     setLoading(false)
   }, [id])
 
@@ -207,6 +230,7 @@ export default function AssetDetailPage() {
               <div className="mt-2 flex items-center gap-3 text-sm text-ink-300">
                 <StatusBadge status={asset.status} />
                 <span>{asset.jobsite?.name || 'Unassigned / yard'}</span>
+                <span>{asset.crew ? `${asset.crew.name} crew` : 'No crew'}</span>
                 {asset.hour_meter != null && (
                   <span className="font-mono text-ink-500">{asset.hour_meter.toLocaleString()} hrs</span>
                 )}
@@ -249,6 +273,10 @@ export default function AssetDetailPage() {
           />
         </div>
       </header>
+
+      <div className="px-6 pt-6">
+        <TelematicsPanel asset={asset} telematics={telematics} usage={usage} trail={trail} />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 px-6 py-6 lg:grid-cols-2">
         <Section
