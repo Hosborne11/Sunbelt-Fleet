@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -13,7 +14,10 @@ import {
   MapPin,
   Tags,
   Wrench,
+  LogOut,
+  MailCheck,
 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 const BUILT = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -33,6 +37,7 @@ const DIRECTORY = [{ to: '/contacts', label: 'Contacts', icon: Users }]
 const SETUP = [
   { to: '/jobsites', label: 'Jobsites', icon: MapPin },
   { to: '/categories', label: 'Categories', icon: Tags },
+  { to: '/settings/pm', label: 'PM Workflow', icon: MailCheck },
 ]
 
 function linkClasses({ isActive }) {
@@ -65,6 +70,11 @@ function NavSection({ title, items }) {
 }
 
 export default function Sidebar() {
+  const [email, setEmail] = useState('')
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email || ''))
+  }, [])
+
   return (
     <aside className="flex h-full w-60 flex-col border-r border-graphite-700 bg-graphite-800">
       <div className="border-b border-graphite-700 px-4 py-5">
@@ -79,6 +89,19 @@ export default function Sidebar() {
         <NavSection title="Directory" items={DIRECTORY} />
         <NavSection title="Setup" items={SETUP} />
       </nav>
+
+      <div className="border-t border-graphite-700 px-3 py-3">
+        <div className="truncate px-3 pb-1.5 text-xs text-ink-500" title={email}>
+          {email}
+        </div>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="flex w-full items-center gap-2.5 rounded px-3 py-2 text-sm text-ink-300 transition-colors hover:bg-graphite-700 hover:text-ink-100"
+        >
+          <LogOut size={17} strokeWidth={1.75} />
+          Sign out
+        </button>
+      </div>
     </aside>
   )
 }

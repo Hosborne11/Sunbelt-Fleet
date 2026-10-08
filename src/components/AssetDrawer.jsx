@@ -1,8 +1,22 @@
 import { useEffect, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { pmAction } from '../lib/pm'
 
 const STATUSES = ['active', 'down', 'maintenance', 'retired']
+const DISPOSAL = [
+  { value: 'sold', label: 'Sold' },
+  { value: 'traded_in', label: 'Traded in' },
+  { value: 'scrapped', label: 'Scrapped' },
+  { value: 'returned', label: 'Returned to lessor' },
+  { value: 'transferred', label: 'Transferred' },
+  { value: 'other', label: 'Other' },
+]
+const OPEN_REQUEST = ['requested', 'proposed', 'scheduled', 'awaiting_confirmation']
+const todayLocal = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const EMPTY = {
   asset_number: '',
@@ -12,6 +26,7 @@ const EMPTY = {
   year: '',
   serial_number: '',
   jobsite_id: '',
+  crew_id: '',
   status: 'active',
   hour_meter: '',
   odometer: '',
@@ -21,12 +36,23 @@ const EMPTY = {
   useful_life_years: '',
   warranty_expiration: '',
   notes: '',
+  retired_on: '',
+  disposal_method: '',
+  disposal_value: '',
+  disposal_notes: '',
+  replaced_by_asset_id: '',
 }
 
 export default function AssetDrawer({ asset, categories, jobsites, onClose, onSaved, onDeleted }) {
   const [form, setForm] = useState(EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [crews, setCrews] = useState([])
+
+  useEffect(() => {
+    supabase.from('crews').select('id, name').eq('active', true).order('sort_order')
+      .then(({ data }) => setCrews(data || []))
+  }, [])
 
   useEffect(() => {
     if (asset) {
@@ -35,6 +61,7 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
         ...asset,
         category_id: asset.category_id || '',
         jobsite_id: asset.jobsite_id || '',
+        crew_id: asset.crew_id || '',
         year: asset.year ?? '',
         hour_meter: asset.hour_meter ?? '',
         odometer: asset.odometer ?? '',
@@ -47,6 +74,11 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
         model: asset.model || '',
         serial_number: asset.serial_number || '',
         notes: asset.notes || '',
+        retired_on: asset.retired_on || '',
+        disposal_method: asset.disposal_method || '',
+        disposal_value: asset.disposal_value ?? '',
+        disposal_notes: asset.disposal_notes || '',
+        replaced_by_asset_id: asset.replaced_by_asset_id || '',
       })
     } else {
       setForm(EMPTY)
@@ -54,8 +86,22 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
   }, [asset])
 
   function set(field, value) {
-    setForm((f) => ({ ...f, [field]: value }))
+    setForm((f) => ({
+      ...f,
+      [field]: value,
+      ...(field === 'status' && value === 'retired' && !f.retired_on ? { retired_on: todayLocal() } : {}),
+    }))
   }
+
+  // Other machines in service, for "Replaced by"
+  const [others, setOthers] = useState([])
+  const retiring = form.status === 'retired'
+  useEffect(() => {
+    if (!retiring) return
+    let q = supabase.from('assets').select('id, asset_number, make, model').neq('status', 'retired').order('asset_number')
+    if (asset?.id) q = q.neq('id', asset.id)
+    q.then(({ data }) => setOthers(data || []))
+  }, [retiring, asset?.id])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -63,8 +109,22 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
       setError('Asset # is required.')
       return
     }
+    const becomingRetired = asset && asset.status !== 'retired' && form.status === 'retired'
+    let openRequest = null
+    if (becomingRetired) {
+      const { data: reqs } = await supabase.from('pm_requests').select('id, vendor_name')
+        .eq('asset_id', asset.id).in('status', OPEN_REQUEST).limit(1)
+      openRequest = reqs?.[0] || null
+      const ok = window.confirm(
+        `Retire ${form.asset_number}? Its history through ${form.retired_on || 'today'} is kept. ` +
+        `Live tracking and PM reminders stop` +
+        (openRequest ? `, and the open service request with ${openRequest.vendor_name || 'the dealer'} will be cancelled (they'll get an email).` : '.')
+      )
+      if (!ok) return
+    }
     setSaving(true)
     setError(null)
+    if (openRequest) await pmAction('cancel', { request_id: openRequest.id })
 
     const newHourMeter = form.hour_meter !== '' ? Number(form.hour_meter) : null
 
@@ -76,6 +136,7 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
       year: form.year ? Number(form.year) : null,
       serial_number: form.serial_number.trim() || null,
       jobsite_id: form.jobsite_id || null,
+      crew_id: form.crew_id || null,
       status: form.status,
       hour_meter: newHourMeter,
       odometer: form.odometer !== '' ? Number(form.odometer) : null,
@@ -85,6 +146,11 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
       useful_life_years: form.useful_life_years !== '' ? Number(form.useful_life_years) : null,
       warranty_expiration: form.warranty_expiration || null,
       notes: form.notes.trim() || null,
+      retired_on: retiring ? form.retired_on || todayLocal() : null,
+      disposal_method: retiring ? form.disposal_method || null : null,
+      disposal_value: retiring && form.disposal_value !== '' ? Number(form.disposal_value) : null,
+      disposal_notes: retiring ? form.disposal_notes.trim() || null : null,
+      replaced_by_asset_id: retiring ? form.replaced_by_asset_id || null : null,
     }
 
     let assetId = asset?.id
@@ -96,7 +162,11 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
 
     if (err) {
       setSaving(false)
-      setError(err.message)
+      setError(
+        err.code === '23505' && /asset_number/.test(err.message)
+          ? `Asset # ${payload.asset_number} is already used by a machine in service. Retire that machine first, or use a different number.`
+          : err.message
+      )
       return
     }
     if (!asset && data) assetId = data.id
@@ -133,7 +203,13 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
 
   async function handleDelete() {
     if (!asset) return
-    if (!window.confirm(`Delete asset ${asset.asset_number}? This can't be undone.`)) return
+    if (
+      !window.confirm(
+        `Delete ${asset.asset_number} permanently? This removes its PM plans, service history, files and hour readings. ` +
+          `To keep its history, cancel and set Status to "retired" instead.`
+      )
+    )
+      return
     setSaving(true)
     const { error: err } = await supabase.from('assets').delete().eq('id', asset.id)
     setSaving(false)
@@ -202,6 +278,47 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
             </Field>
           </div>
 
+          {retiring && (
+            <div className="space-y-3 rounded border border-graphite-600 bg-graphite-800/60 px-3 py-3">
+              <div>
+                <div className="text-sm font-medium text-ink-100">Retirement</div>
+                <p className="text-xs text-ink-500">
+                  History through the retired date is kept. Live tracking and PM reminders stop. The asset # can be reused
+                  by the replacement.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Retired on">
+                  <input type="date" value={form.retired_on} onChange={(e) => set('retired_on', e.target.value)} className="input" />
+                </Field>
+                <Field label="How">
+                  <select value={form.disposal_method} onChange={(e) => set('disposal_method', e.target.value)} className="input">
+                    <option value="">Choose…</option>
+                    {DISPOSAL.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Sale / trade-in value">
+                  <input type="number" step="0.01" value={form.disposal_value}
+                         onChange={(e) => set('disposal_value', e.target.value)} className="input font-mono" />
+                </Field>
+                <Field label="Replaced by">
+                  <select value={form.replaced_by_asset_id} onChange={(e) => set('replaced_by_asset_id', e.target.value)} className="input">
+                    <option value="">None</option>
+                    {others.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.asset_number}{o.make || o.model ? ` (${[o.make, o.model].filter(Boolean).join(' ')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Notes">
+                <input value={form.disposal_notes} onChange={(e) => set('disposal_notes', e.target.value)} className="input"
+                       placeholder="e.g. traded to James River for the new 350 P" />
+              </Field>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Make">
               <input value={form.make} onChange={(e) => set('make', e.target.value)} className="input" />
@@ -244,14 +361,30 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
             </select>
           </Field>
 
+          <Field label="Crew">
+            <select value={form.crew_id} onChange={(e) => set('crew_id', e.target.value)} className="input">
+              <option value="">Not assigned</option>
+              {crews.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} crew
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Hour meter">
               <input
                 type="number"
                 value={form.hour_meter}
                 onChange={(e) => set('hour_meter', e.target.value)}
-                className="input font-mono"
+                readOnly={!!asset?.telematics_asset_id}
+                title={asset?.telematics_asset_id ? 'Updated automatically from telematics' : undefined}
+                className={`input font-mono ${asset?.telematics_asset_id ? 'cursor-not-allowed opacity-60' : ''}`}
               />
+              {asset?.telematics_asset_id && (
+                <p className="mt-1 text-xs text-ink-500">Updated automatically from telematics.</p>
+              )}
             </Field>
             <Field label="Odometer">
               <input

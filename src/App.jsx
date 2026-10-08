@@ -14,10 +14,31 @@ import ReportsPage from './pages/ReportsPage'
 import ContactsPage from './pages/ContactsPage'
 import JobsitesPage from './pages/JobsitesPage'
 import CategoriesPage from './pages/CategoriesPage'
+import AuthGate from './components/AuthGate'
+import VendorPortalPage from './pages/VendorPortalPage'
+import PmSettingsPage from './pages/PmSettingsPage'
 
 export default function App() {
   return (
     <BrowserRouter>
+      <Routes>
+        {/* Public: the service vendor opens this from the emailed link (no sign-in) */}
+        <Route path="/pm/r/:token" element={<VendorPortalPage />} />
+        <Route
+          path="*"
+          element={
+            <AuthGate>
+              <AppShell />
+            </AuthGate>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+function AppShell() {
+  return (
       <div className="flex h-screen w-screen overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-hidden">
@@ -36,9 +57,9 @@ export default function App() {
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/jobsites" element={<JobsitesPage />} />
             <Route path="/categories" element={<CategoriesPage />} />
+            <Route path="/settings/pm" element={<PmSettingsPage />} />
           </Routes>
         </main>
       </div>
-    </BrowserRouter>
   )
 }
