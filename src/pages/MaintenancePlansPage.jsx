@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, Wrench, AlertTriangle, Clock } from 'lucide-react'
+import { Plus, Search, Wrench, AlertTriangle, Clock, CalendarX } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { computeDue } from '../lib/maintenanceDue'
+import { computeDue, needsScheduling, fmtDate, DUE_SOON_HOURS } from '../lib/maintenanceDue'
 import MaintenancePlanDrawer from '../components/MaintenancePlanDrawer'
+import { REQUEST_STATUS } from '../lib/pm'
 
-const TABS = ['All', 'Overdue', 'Due Soon']
+const TABS = ['All', 'Overdue', 'Due Soon', 'Not scheduled']
 
 const STATUS_STYLES = {
   overdue: 'bg-rust-500/15 text-rust-400 border-rust-500/30',
@@ -34,6 +35,7 @@ function Badge({ status }) {
 export default function MaintenancePlansPage() {
   const [plans, setPlans] = useState([])
   const [assets, setAssets] = useState([])
+  const [requests, setRequests] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('All')
@@ -45,13 +47,16 @@ export default function MaintenancePlansPage() {
   async function loadAll() {
     setLoading(true)
     setError(null)
-    const [plansRes, assetsRes] = await Promise.all([
+    const [plansRes, assetsRes, reqRes] = await Promise.all([
       supabase
         .from('maintenance_plans')
         .select('*, asset:assets(id,asset_number,hour_meter)')
         .order('name'),
       supabase.from('assets').select('id, asset_number').order('asset_number'),
+      supabase.from('pm_requests').select('plan_id, status, scheduled_date, proposed_date, vendor_name')
+        .in('status', ['requested', 'proposed', 'scheduled', 'awaiting_confirmation']),
     ])
+    setRequests(Object.fromEntries((reqRes.data || []).map((r) => [r.plan_id, r])))
     if (plansRes.error) setError(plansRes.error.message)
     setPlans(plansRes.data || [])
     setAssets(assetsRes.data || [])
@@ -70,6 +75,7 @@ export default function MaintenancePlansPage() {
     return enriched.filter((p) => {
       if (tab === 'Overdue' && p.due.status !== 'overdue') return false
       if (tab === 'Due Soon' && p.due.status !== 'due_soon') return false
+      if (tab === 'Not scheduled' && (!needsScheduling(p, p.due) || requests[p.id])) return false
       if (search) {
         const q = search.toLowerCase()
         const hay = [p.name, p.asset?.asset_number].filter(Boolean).join(' ').toLowerCase()
@@ -77,12 +83,13 @@ export default function MaintenancePlansPage() {
       }
       return true
     })
-  }, [enriched, tab, search])
+  }, [enriched, tab, search, requests])
 
   const counts = useMemo(
     () => ({
       overdue: enriched.filter((p) => p.due.status === 'overdue').length,
       dueSoon: enriched.filter((p) => p.due.status === 'due_soon').length,
+      unscheduled: enriched.filter((p) => needsScheduling(p, p.due)).length,
     }),
     [enriched]
   )
@@ -126,9 +133,10 @@ export default function MaintenancePlansPage() {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryCard icon={AlertTriangle} label="Overdue" value={counts.overdue} accent="rust" />
-          <SummaryCard icon={Clock} label="Due soon" value={counts.dueSoon} accent="amber" />
+          <SummaryCard icon={Clock} label={`Due within ${DUE_SOON_HOURS} hrs`} value={counts.dueSoon} accent="amber" />
+          <SummaryCard icon={CalendarX} label="Due, not scheduled" value={counts.unscheduled} accent="amber" />
           <SummaryCard icon={Wrench} label="Total plans" value={plans.length} />
         </div>
 
@@ -168,7 +176,7 @@ export default function MaintenancePlansPage() {
         {error && (
           <div className="mb-4 rounded border border-rust-500/30 bg-rust-500/10 px-4 py-3 text-sm text-rust-400">
             {error.includes('relation') || error.includes('does not exist')
-              ? "Couldn't find the maintenance_plans table yet — run supabase/migrations/013_maintenance_plans.sql in your Supabase project's SQL editor, then reload."
+              ? "Maintenance tables are missing. Run supabase/migrations/003_app_tables.sql and 007_pm_plans.sql in the Supabase SQL editor, then reload."
               : error}
           </div>
         )}
@@ -192,12 +200,14 @@ export default function MaintenancePlansPage() {
 
         {filtered.length > 0 && (
           <div className="overflow-x-auto rounded border border-graphite-800">
-            <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">
+            <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
               <colgroup>
-                <col className="w-56" />
-                <col className="w-32" />
+                <col className="w-48" />
                 <col className="w-28" />
-                <col className="w-28" />
+                <col className="w-24" />
+                <col className="w-36" />
+                <col className="w-24" />
+                <col className="w-24" />
                 <col className="w-32" />
                 <col className="w-28" />
               </colgroup>
@@ -206,8 +216,10 @@ export default function MaintenancePlansPage() {
                   <th className="py-2 pl-3 pr-3 font-medium">Plan</th>
                   <th className="py-2 pr-3 font-medium">Asset</th>
                   <th className="py-2 pr-3 font-medium">Interval</th>
+                  <th className="py-2 pr-3 font-medium">Last service</th>
+                  <th className="py-2 pr-3 font-medium">Due at</th>
                   <th className="py-2 pr-3 font-medium">Hours left</th>
-                  <th className="py-2 pr-3 font-medium">Due date</th>
+                  <th className="py-2 pr-3 font-medium">Scheduled</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
                 </tr>
               </thead>
@@ -227,10 +239,43 @@ export default function MaintenancePlansPage() {
                         .filter(Boolean)
                         .join(' / ') || '—'}
                     </td>
-                    <td className="py-2.5 pr-3 font-mono text-ink-500">
-                      {p.due.hoursRemaining != null ? Math.round(p.due.hoursRemaining) : '—'}
+                    <td className="truncate py-2.5 pr-3 text-ink-500">
+                      {p.last_service_hours != null || p.last_service_date
+                        ? [p.last_service_date && fmtDate(p.last_service_date),
+                           p.last_service_hours != null && `${Math.round(p.last_service_hours).toLocaleString()} hrs`]
+                            .filter(Boolean).join(', ')
+                        : <span className="italic">Not recorded</span>}
                     </td>
-                    <td className="py-2.5 pr-3 font-mono text-ink-500">{p.due.dueDate || '—'}</td>
+                    <td className="py-2.5 pr-3 font-mono text-ink-500">
+                      {p.due.dueAtHours != null ? Math.round(p.due.dueAtHours).toLocaleString() : p.due.dueDate || '—'}
+                    </td>
+                    <td className={`py-2.5 pr-3 font-mono ${p.due.status === 'overdue' ? 'text-rust-400' : p.due.status === 'due_soon' ? 'text-amber-400' : 'text-ink-500'}`}>
+                      {p.due.hoursRemaining == null
+                        ? '—'
+                        : p.due.hoursRemaining < 0
+                          ? `${Math.abs(Math.round(p.due.hoursRemaining))} over`
+                          : Math.round(p.due.hoursRemaining)}
+                    </td>
+                    <td className="truncate py-2.5 pr-3">
+                      {requests[p.id] && requests[p.id].status !== 'scheduled' ? (
+                        <span className="rounded border border-amber-400/50 px-1.5 py-0.5 text-[11px] text-amber-400"
+                              title={REQUEST_STATUS[requests[p.id].status].hint}>
+                          {requests[p.id].status === 'requested'
+                            ? `Requested from ${requests[p.id].vendor_name || 'dealer'}`
+                            : requests[p.id].status === 'proposed'
+                              ? `Accept ${fmtDate(requests[p.id].proposed_date)}?`
+                              : 'Waiting on work order'}
+                        </span>
+                      ) : p.scheduled_for ? (
+                        <span className="text-teal-400" title={p.scheduled_note || ''}>
+                          {fmtDate(p.scheduled_for)}{p.scheduled_note ? `, ${p.scheduled_note}` : ''}
+                        </span>
+                      ) : needsScheduling(p, p.due) ? (
+                        <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[11px] font-medium text-graphite-950">Needs a date</span>
+                      ) : (
+                        <span className="text-ink-500">—</span>
+                      )}
+                    </td>
                     <td className="py-2.5 pr-3">
                       <Badge status={p.due.status} />
                     </td>
