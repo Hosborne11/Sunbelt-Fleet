@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, FileBarChart, Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { REPORTS, reportsByCategory, toCSV, downloadCSV } from '../lib/reports'
 
 export default function ReportsPage() {
@@ -48,6 +49,13 @@ export default function ReportsPage() {
   return (
     <div className="flex h-full">
       <aside className="w-64 shrink-0 overflow-y-auto border-r border-graphite-700 bg-graphite-800/40 px-3 py-4">
+        <div className="mb-4">
+          <div className="px-2 pb-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-500">Job costing</div>
+          <Link to="/reports/hours-by-project"
+                className="block rounded px-2 py-1.5 text-sm text-ink-300 transition-colors hover:bg-graphite-700 hover:text-ink-100">
+            Hours by project
+          </Link>
+        </div>
         {categories.map(([category, reports]) => (
           <div key={category} className="mb-4">
             <div className="px-2 pb-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-500">

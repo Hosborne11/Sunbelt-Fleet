@@ -11,13 +11,38 @@ import ReservationsPage from './pages/ReservationsPage'
 import RentalsPage from './pages/RentalsPage'
 import LeasesPage from './pages/LeasesPage'
 import ReportsPage from './pages/ReportsPage'
+import HoursByProjectReport from './pages/HoursByProjectReport'
 import ContactsPage from './pages/ContactsPage'
 import JobsitesPage from './pages/JobsitesPage'
 import CategoriesPage from './pages/CategoriesPage'
+import AuthGate from './components/AuthGate'
+import VendorPortalPage from './pages/VendorPortalPage'
+import VendorHubPage from './pages/VendorHubPage'
+import PmCalendarPage from './pages/PmCalendarPage'
+import PmSettingsPage from './pages/PmSettingsPage'
 
 export default function App() {
   return (
     <BrowserRouter>
+      <Routes>
+        {/* Public: the service vendor opens this from the emailed link (no sign-in) */}
+        <Route path="/pm/r/:token" element={<VendorPortalPage />} />
+        <Route path="/pm/v/:token" element={<VendorHubPage />} />
+        <Route
+          path="*"
+          element={
+            <AuthGate>
+              <AppShell />
+            </AuthGate>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+function AppShell() {
+  return (
       <div className="flex h-screen w-screen overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-hidden">
@@ -33,12 +58,14 @@ export default function App() {
             <Route path="/rentals" element={<RentalsPage />} />
             <Route path="/leases" element={<LeasesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/reports/hours-by-project" element={<HoursByProjectReport />} />
+            <Route path="/pm-calendar" element={<PmCalendarPage />} />
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/jobsites" element={<JobsitesPage />} />
             <Route path="/categories" element={<CategoriesPage />} />
+            <Route path="/settings/pm" element={<PmSettingsPage />} />
           </Routes>
         </main>
       </div>
-    </BrowserRouter>
   )
 }
