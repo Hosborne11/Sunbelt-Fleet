@@ -38,6 +38,10 @@ Stack: React + Vite + Tailwind + Supabase (Postgres + Auth), deployed on Vercel.
 15. `supabase/migrations/015_keep_fleet_truck_names.sql`: truck names changed in Fleet stay changed; a OneStep rename still comes through
 16. `supabase/migrations/016_sprint2_pm.sql`: site contacts, machine-moved emails, vendor view links (`/pm/v/:token`), `pm_calendar` (deploy `pm-workflow` v4 with it)
 17. `supabase/migrations/017_sprint3.sql`: utilization flags (`asset_utilization`, `utilization_settings`), custom reports (`report_daily_rows`, `saved_reports`), serial on the PM calendar
+<<<<<<< Updated upstream
+=======
+18. `supabase/migrations/018_sprint4_reports.sql`: GoAardvark-style daily reports (Maintenance Due, Daily Utilization) emailed by `pm-workflow` v5; asset ownership
+>>>>>>> Stashed changes
 
 Then fill the registry:
 

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+<<<<<<< Updated upstream
 import { Plus, Search, Wrench, AlertTriangle, Clock, CalendarX } from 'lucide-react'
+=======
+import { Plus, Search, Wrench, AlertTriangle, Clock, CalendarX, ArrowDown, ArrowUp } from 'lucide-react'
+>>>>>>> Stashed changes
 import { supabase } from '../lib/supabase'
 import { computeDue, needsScheduling, fmtDate, DUE_SOON_HOURS } from '../lib/maintenanceDue'
 import MaintenancePlanDrawer from '../components/MaintenancePlanDrawer'
@@ -32,6 +36,21 @@ function Badge({ status }) {
   )
 }
 
+// Column sorting (remembered per browser); blanks always sort last
+const SORT_KEY = 'fleet.pmPlans.sort'
+const DEFAULT_SORT = { key: 'hoursLeft', dir: 'asc' }
+const STATUS_RANK = { overdue: 0, due_soon: 1, ok: 2 }
+const SORTS = {
+  plan: (p) => p.name || null,
+  asset: (p) => p.asset?.asset_number || null,
+  interval: (p) => p.interval_hours ?? (p.interval_days != null ? p.interval_days * 24 : null),
+  last: (p) => p.last_service_date || (p.last_service_hours != null ? String(p.last_service_hours).padStart(8, '0') : null),
+  dueAt: (p) => p.due?.dueAtHours ?? p.due?.dueDate ?? null,
+  hoursLeft: (p) => p.due?.hoursRemaining ?? null,
+  scheduled: (p, requests) => requests[p.id]?.scheduled_date || requests[p.id]?.proposed_date || p.scheduled_for || null,
+  status: (p) => STATUS_RANK[p.due?.status] ?? 3,
+}
+
 export default function MaintenancePlansPage() {
   const [plans, setPlans] = useState([])
   const [assets, setAssets] = useState([])
@@ -40,6 +59,17 @@ export default function MaintenancePlansPage() {
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('All')
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(SORT_KEY)) || DEFAULT_SORT
+    } catch {
+      return DEFAULT_SORT
+    }
+  })
+  useEffect(() => {
+    window.localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+  }, [sort])
+  const sortBy = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState(null)
@@ -85,6 +115,24 @@ export default function MaintenancePlansPage() {
       return true
     })
   }, [enriched, tab, search, requests])
+<<<<<<< Updated upstream
+=======
+
+  const sorted = useMemo(() => {
+    const val = SORTS[sort.key] || SORTS.hoursLeft
+    const sign = sort.dir === 'desc' ? -1 : 1
+    return [...filtered].sort((a, b) => {
+      const va = val(a, requests), vb = val(b, requests)
+      if (va == null && vb == null) return 0
+      if (va == null) return 1   // blanks always last
+      if (vb == null) return -1
+      const c = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), undefined, { numeric: true })
+      return c * sign
+    })
+  }, [filtered, sort, requests])
+>>>>>>> Stashed changes
 
   const counts = useMemo(
     () => ({
@@ -214,6 +262,7 @@ export default function MaintenancePlansPage() {
               </colgroup>
               <thead>
                 <tr className="border-b border-graphite-700 bg-graphite-800/60 text-left text-xs uppercase tracking-wide text-ink-500">
+<<<<<<< Updated upstream
                   <th className="py-2 pl-3 pr-3 font-medium">Plan</th>
                   <th className="py-2 pr-3 font-medium">Asset</th>
                   <th className="py-2 pr-3 font-medium">Interval</th>
@@ -222,10 +271,23 @@ export default function MaintenancePlansPage() {
                   <th className="py-2 pr-3 font-medium">Hours left</th>
                   <th className="py-2 pr-3 font-medium">Scheduled</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
+=======
+                  {[['plan', 'Plan'], ['asset', 'Asset'], ['interval', 'Interval'], ['last', 'Last service'],
+                    ['dueAt', 'Due at'], ['hoursLeft', 'Hours left'], ['scheduled', 'Scheduled'], ['status', 'Status']]
+                    .map(([key, label], i) => (
+                      <th key={key} className={`py-2 pr-3 font-medium ${i === 0 ? 'pl-3' : ''}`}>
+                        <button type="button" onClick={() => sortBy(key)}
+                                className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-ink-300 ${sort.key === key ? 'text-ink-300' : ''}`}>
+                          {label}
+                          {sort.key === key && (sort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                        </button>
+                      </th>
+                    ))}
+>>>>>>> Stashed changes
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
+                {sorted.map((p) => (
                   <tr
                     key={p.id}
                     onClick={() => openEdit(p)}

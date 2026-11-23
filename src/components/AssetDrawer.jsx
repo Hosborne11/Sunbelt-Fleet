@@ -28,6 +28,10 @@ const EMPTY = {
   jobsite_id: '',
   crew_id: '',
   tm_rate: '',
+<<<<<<< Updated upstream
+=======
+  ownership: 'Owned',
+>>>>>>> Stashed changes
   pm_vendor_id: '',
   status: 'active',
   hour_meter: '',
@@ -69,6 +73,10 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
         jobsite_id: asset.jobsite_id || '',
         crew_id: asset.crew_id || '',
         tm_rate: asset.tm_rate ?? '',
+<<<<<<< Updated upstream
+=======
+        ownership: asset.ownership || 'Owned',
+>>>>>>> Stashed changes
         pm_vendor_id: asset.pm_vendor_id || '',
         year: asset.year ?? '',
         hour_meter: asset.hour_meter ?? '',
@@ -146,6 +154,10 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
       jobsite_id: form.jobsite_id || null,
       crew_id: form.crew_id || null,
       tm_rate: form.tm_rate !== '' ? Number(form.tm_rate) : null,
+<<<<<<< Updated upstream
+=======
+      ownership: form.ownership || 'Owned',
+>>>>>>> Stashed changes
       pm_vendor_id: form.pm_vendor_id && form.pm_vendor_id !== defaultVendor?.id ? form.pm_vendor_id : null,
       status: form.status,
       hour_meter: newHourMeter,
@@ -388,6 +400,15 @@ export default function AssetDrawer({ asset, categories, jobsites, onClose, onSa
             </Field>
           </div>
 
+<<<<<<< Updated upstream
+=======
+          <Field label="Ownership">
+            <select value={form.ownership} onChange={(e) => set('ownership', e.target.value)} className="input">
+              {['Owned', 'Rental', 'Leased', 'RPO'].map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </Field>
+
+>>>>>>> Stashed changes
           {vendors.length > 1 && (
             <Field label="PM vendor">
               <select value={form.pm_vendor_id} onChange={(e) => set('pm_vendor_id', e.target.value)} className="input">

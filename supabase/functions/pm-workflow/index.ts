@@ -2,6 +2,10 @@
 // v3: several vendors (public.pm_vendors); each machine is assigned to one, the default vendor otherwise.
 // v4: site contacts; email when a machine with an open request moves; vendor view (/pm/v/:token) listing all
 //     of a vendor's services with date-change requests.
+<<<<<<< Updated upstream
+=======
+// v5: daily GoAardvark-style reports (Maintenance Due + Daily Utilization) emailed as Excel files each morning.
+>>>>>>> Stashed changes
 // Single file: paste into the Supabase dashboard editor as a function named "pm-workflow".
 // Turn OFF "Verify JWT" for this function; it checks staff sign-in, vendor links and the cron key itself.
 //
@@ -14,6 +18,10 @@
 //   dealer (link):      portal_get | portal_propose | portal_reconfirm | portal_upload_url | portal_complete
 //   cron:               cron   (header x-fleet-cron-key)
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+<<<<<<< Updated upstream
+=======
+import * as XLSX from "npm:xlsx@0.18.5";
+>>>>>>> Stashed changes
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -147,7 +155,15 @@ const uniq = (xs: (string | null | undefined)[]) =>
 // =====================================================================
 // EMAIL — Microsoft 365 (Graph) or Resend, chosen by EMAIL_PROVIDER
 // =====================================================================
+<<<<<<< Updated upstream
 interface Mail { to: string[]; cc?: string[]; subject: string; html: string; text: string; replyTo?: string | null }
+=======
+interface Attachment { name: string; contentType: string; base64: string }
+interface Mail {
+  to: string[]; cc?: string[]; subject: string; html: string; text: string; replyTo?: string | null;
+  attachments?: Attachment[];
+}
+>>>>>>> Stashed changes
 
 let graphToken: { value: string; exp: number } | null = null;
 async function graphAccessToken() {
@@ -188,6 +204,10 @@ async function sendMail(m: Mail): Promise<{ ok: boolean; error?: string }> {
         body: JSON.stringify({
           from: env("EMAIL_FROM"), to: m.to, cc: m.cc?.length ? m.cc : undefined,
           subject: m.subject, html: m.html, text: m.text, reply_to: m.replyTo || undefined,
+<<<<<<< Updated upstream
+=======
+          attachments: m.attachments?.map((a) => ({ filename: a.name, content: a.base64 })),
+>>>>>>> Stashed changes
         }),
       });
       if (!res.ok) return { ok: false, error: `Resend ${res.status}: ${(await res.text()).slice(0, 300)}` };
@@ -205,6 +225,13 @@ async function sendMail(m: Mail): Promise<{ ok: boolean; error?: string }> {
           toRecipients: m.to.map(addr),
           ccRecipients: (m.cc || []).map(addr),
           replyTo: m.replyTo ? [addr(m.replyTo)] : [],
+<<<<<<< Updated upstream
+=======
+          attachments: (m.attachments || []).map((a) => ({
+            "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType,
+            contentBytes: a.base64,
+          })),
+>>>>>>> Stashed changes
         },
         saveToSentItems: true,
       }),
@@ -510,6 +537,134 @@ async function vendorForAsset(db: Db, assetId: string): Promise<Any | null> {
     : null;
 }
 
+<<<<<<< Updated upstream
+=======
+// ---------- daily reports (GoAardvark layouts) ----------
+const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const NUM1 = "#,##0.0;(#,##0.0)";
+
+function etClock(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(d);
+  const g = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  return { y: g("year"), m: g("month"), d: g("day"), hh: g("hour") % 24, mi: g("minute"), ss: g("second") };
+}
+// Excel shows these as written (wall-clock Eastern), so build them as UTC with the Eastern numbers
+const wall = (y: number, m: number, d: number, hh = 0, mi = 0, ss = 0) => new Date(Date.UTC(y, m - 1, d, hh, mi, ss));
+const dayOf = (s: string | null) => (s ? wall(Number(s.slice(0, 4)), Number(s.slice(5, 7)), Number(s.slice(8, 10))) : null);
+const stampOf = (s: string | null) =>
+  s ? wall(Number(s.slice(0, 4)), Number(s.slice(5, 7)), Number(s.slice(8, 10)),
+           Number(s.slice(11, 13) || 0), Number(s.slice(14, 16) || 0), Number(s.slice(17, 19) || 0)) : null;
+const numOr = (v: unknown, fallback: unknown = null) => (v === null || v === undefined ? fallback : Number(v));
+
+function workbook(sheet: string, header: string[], rows: unknown[][], fmt: Record<number, string>, widths: number[]) {
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows], { cellDates: true });
+  for (let r = 1; r <= rows.length; r++) {
+    for (const [c, z] of Object.entries(fmt)) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: Number(c) })];
+      if (cell && (cell.t === "n" || cell.t === "d")) cell.z = z;
+    }
+  }
+  ws["!cols"] = widths.map((w) => ({ wch: w }));
+  if (ws["!ref"]) ws["!autofilter"] = { ref: ws["!ref"] };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheet);
+  return XLSX.write(wb, { type: "base64", bookType: "xlsx", cellDates: true }) as string;
+}
+
+async function dailyReports(db: Db, opts: { force?: boolean; to?: string[] }) {
+  const { data: s } = await db.from("report_settings").select("*").eq("id", true).maybeSingle();
+  if (!s) return { skipped: "report settings missing (run migration 018)" };
+  const now = etClock();
+  const today = `${now.y}-${String(now.m).padStart(2, "0")}-${String(now.d).padStart(2, "0")}`;
+  let claimedFrom: string | null = null;
+  if (!opts.force) {
+    if (!s.enabled || !(s.recipients || []).length) return { skipped: "off" };
+    if (now.hh < s.send_hour || s.last_sent_on === today) return { skipped: "not due" };
+    // claim today's send so overlapping runs can't both send
+    const { data: claimed } = await db.from("report_settings").update({ last_sent_on: today })
+      .eq("id", true).or(`last_sent_on.is.null,last_sent_on.lt.${today}`).select("id");
+    if (!claimed?.length) return { skipped: "already sent" };
+    claimedFrom = s.last_sent_on;
+  }
+  const to: string[] = opts.to?.length ? opts.to : uniq(s.recipients || []);
+  if (!to.length) return { ok: false, error: "No recipients. Add them under Daily reports." };
+
+  const attachments: Attachment[] = [];
+  const summary: string[] = [];
+  const stamp = wall(now.y, now.m, now.d, now.hh, now.mi, now.ss);
+
+  if (s.send_maintenance_due) {
+    const { data, error } = await db.rpc("report_maintenance_due", { p_within: null });
+    if (error) return await reportFailed(db, claimedFrom, opts, `Maintenance Due: ${error.message}`);
+    const rows = (data || []).map((r: Any) => [
+      r.machine_name, r.make, r.model, r.serno, r.status, numOr(r.hrs_mi), r.job, r.work_order_status, r.plan,
+      dayOf(r.report_date), numOr(r.due_hrs_mil), numOr(r.hrs_mi_to_service), stampOf(r.scheduled_date),
+    ]);
+    attachments.push({
+      name: "Maintenance_Due.xlsx", contentType: XLSX_TYPE,
+      base64: workbook("Maintenance Due",
+        ["Machine Name", "Make", "Model", "SerNo", "Status", "Hrs/Mi", "Job", "Work Order Status", "Plan",
+         "Report Date", "Due Hrs/Mil", "Hrs/Mi To Service", "Scheduled Date"],
+        rows, { 5: "#,##0;(#,##0)", 9: "m/d/yyyy", 10: "#,##0", 11: "0.0;(0.0)", 12: "m/d/yyyy h:mm AM/PM" },
+        [28, 12, 14, 23, 17, 9, 35, 21, 31, 11, 8, 11, 20]),
+    });
+    const overdue = (data || []).filter((r: Any) => Number(r.hrs_mi_to_service) < 0).length;
+    const notRequested = (data || []).filter((r: Any) => r.work_order_status === "Not Requested").length;
+    summary.push(`<b>Maintenance Due:</b> ${(data || []).length} machine${(data || []).length === 1 ? "" : "s"} within ` +
+      `${Number(s.pm_due_within_hours)} hours of a PM` + (overdue ? `, ${overdue} overdue` : "") +
+      (notRequested ? `, ${notRequested} not yet requested` : "") + ".");
+  }
+
+  if (s.send_daily_utilization) {
+    const { data, error } = await db.rpc("report_daily_utilization", { p_day: null });
+    if (error) return await reportFailed(db, claimedFrom, opts, `Daily Utilization: ${error.message}`);
+    const rows = (data || []).map((r: Any) => [
+      stamp, r.machine_name, r.make, r.model, r.serno, numOr(r.hours), r.job, r.status, numOr(r.days_since_used),
+      r.prior_day_inspection_completed, numOr(r.fuel_used_prior_day, "n/a"), numOr(r.hours_od_prior_day),
+      numOr(r.idle_hours_prior_day, "n/a"), numOr(r.util_hrs_pct_prior_day, 0),
+    ]);
+    attachments.push({
+      name: "DailyUtilization.xlsx", contentType: XLSX_TYPE,
+      base64: workbook("DailyUtilization",
+        ["For Date", "Machine Name", "Make", "Model", "SerNo", "Hours", "Job", "Status", "Days Since Used",
+         "Prior Day Inspection Completed", "Fuel Used Prior Day", "Hours /Od Prior Day", "Idle  Hours Prior Day",
+         "Util Hrs % Prior Day"],
+        rows, { 0: "m/d/yyyy", 5: "#,##0;(#,##0)", 10: NUM1, 11: NUM1, 12: NUM1, 13: "0%" },
+        [11, 24, 12, 12, 21, 9, 30, 15, 9, 12, 11, 11, 11, 11]),
+    });
+    const worked = (data || []).filter((r: Any) => Number(r.hours_od_prior_day) > 0);
+    const hours = worked.reduce((t: number, r: Any) => t + Number(r.hours_od_prior_day), 0);
+    const unused = (data || []).filter((r: Any) => Number(r.days_since_used) >= 7).length;
+    summary.push(`<b>Daily Utilization:</b> ${worked.length} of ${(data || []).length} machines worked yesterday, ` +
+      `${hours.toFixed(1)} engine hours in total` + (unused ? `; ${unused} unused for 7 days or more` : "") + ".");
+  }
+
+  if (!attachments.length) return await reportFailed(db, claimedFrom, opts, "Both reports are switched off.");
+  const dateText = new Date(Date.UTC(now.y, now.m - 1, now.d))
+    .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2937">` +
+    `<p>Good morning. Today's fleet reports are attached.</p>` + summary.map((x) => `<p>${x}</p>`).join("") +
+    `<p style="color:#6b7280;font-size:12px">Sent by Sunbelt Utilities Fleet. Change the list or the time under ` +
+    `Setup, PM Workflow, Daily reports.</p></div>`;
+  const text = ["Today's fleet reports are attached.", "", ...summary.map((x) => x.replace(/<[^>]+>/g, ""))].join("\n");
+  const res = await sendMail({ to, subject: `Fleet reports for ${dateText}: Maintenance Due and Daily Utilization`, html, text, attachments });
+  if (!res.ok) return await reportFailed(db, claimedFrom, opts, res.error || "send failed");
+  if (!opts.force) await db.from("report_settings").update({ last_error: null }).eq("id", true);
+  return { ok: true, to, files: attachments.map((a) => a.name) };
+}
+
+async function reportFailed(db: Db, claimedFrom: string | null, opts: { force?: boolean }, error: string) {
+  // scheduled run: release today's claim so the next 15-minute run tries again, and record why
+  const patch: Record<string, unknown> = { last_error: `${new Date().toISOString()}: ${error}`.slice(0, 500) };
+  if (!opts.force) patch.last_sent_on = claimedFrom;
+  await db.from("report_settings").update(patch).eq("id", true);
+  return { ok: false, error };
+}
+
+>>>>>>> Stashed changes
 async function vendorByToken(db: Db, token: unknown) {
   if (typeof token !== "string" || token.length < 32) throw new HttpErr(404, "This link isn't valid.");
   const { data } = await db.from("pm_vendors").select("id, name, active").eq("portal_token", token).maybeSingle();
@@ -646,7 +801,12 @@ async function handle(req: Request, db: Db, body: Any) {
       }
     }
     const moved = await checkLocations(db, (open || []).filter((x) => ["requested", "proposed", "scheduled"].includes(x.status)), now);
+<<<<<<< Updated upstream
     return { checked: open?.length ?? 0, sent, location_updates: moved };
+=======
+    const reports = await dailyReports(db, {});
+    return { checked: open?.length ?? 0, sent, location_updates: moved, daily_reports: reports };
+>>>>>>> Stashed changes
   }
 
   // ---------------- vendor view (one link per vendor) ----------------
@@ -788,6 +948,15 @@ async function handle(req: Request, db: Db, body: Any) {
   const user = await staffUser(req, db);
   if (!user) fail(401, "Sign in to Fleet to do this.");
 
+<<<<<<< Updated upstream
+=======
+  // Daily reports, now: to the signed-in user (a test) or to the whole list
+  if (action === "reports_send_now") {
+    if (body.to !== "list" && !user!.email) fail(400, "Your sign-in has no email address to send the test to.");
+    return await dailyReports(db, { force: true, to: body.to === "list" ? undefined : [String(user!.email)] });
+  }
+
+>>>>>>> Stashed changes
   if (action === "test_email") {
     const m = layout({
       heading: "Fleet email test",
