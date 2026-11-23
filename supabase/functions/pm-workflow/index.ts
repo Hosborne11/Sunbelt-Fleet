@@ -2,7 +2,10 @@
 // v3: several vendors (public.pm_vendors); each machine is assigned to one, the default vendor otherwise.
 // v4: site contacts; email when a machine with an open request moves; vendor view (/pm/v/:token) listing all
 //     of a vendor's services with date-change requests.
+<<<<<<< Updated upstream
+=======
 // v5: daily GoAardvark-style reports (Maintenance Due + Daily Utilization) emailed as Excel files each morning.
+>>>>>>> Stashed changes
 // Single file: paste into the Supabase dashboard editor as a function named "pm-workflow".
 // Turn OFF "Verify JWT" for this function; it checks staff sign-in, vendor links and the cron key itself.
 //
@@ -15,7 +18,10 @@
 //   dealer (link):      portal_get | portal_propose | portal_reconfirm | portal_upload_url | portal_complete
 //   cron:               cron   (header x-fleet-cron-key)
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+<<<<<<< Updated upstream
+=======
 import * as XLSX from "npm:xlsx@0.18.5";
+>>>>>>> Stashed changes
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -149,11 +155,15 @@ const uniq = (xs: (string | null | undefined)[]) =>
 // =====================================================================
 // EMAIL — Microsoft 365 (Graph) or Resend, chosen by EMAIL_PROVIDER
 // =====================================================================
+<<<<<<< Updated upstream
+interface Mail { to: string[]; cc?: string[]; subject: string; html: string; text: string; replyTo?: string | null }
+=======
 interface Attachment { name: string; contentType: string; base64: string }
 interface Mail {
   to: string[]; cc?: string[]; subject: string; html: string; text: string; replyTo?: string | null;
   attachments?: Attachment[];
 }
+>>>>>>> Stashed changes
 
 let graphToken: { value: string; exp: number } | null = null;
 async function graphAccessToken() {
@@ -194,7 +204,10 @@ async function sendMail(m: Mail): Promise<{ ok: boolean; error?: string }> {
         body: JSON.stringify({
           from: env("EMAIL_FROM"), to: m.to, cc: m.cc?.length ? m.cc : undefined,
           subject: m.subject, html: m.html, text: m.text, reply_to: m.replyTo || undefined,
+<<<<<<< Updated upstream
+=======
           attachments: m.attachments?.map((a) => ({ filename: a.name, content: a.base64 })),
+>>>>>>> Stashed changes
         }),
       });
       if (!res.ok) return { ok: false, error: `Resend ${res.status}: ${(await res.text()).slice(0, 300)}` };
@@ -212,10 +225,13 @@ async function sendMail(m: Mail): Promise<{ ok: boolean; error?: string }> {
           toRecipients: m.to.map(addr),
           ccRecipients: (m.cc || []).map(addr),
           replyTo: m.replyTo ? [addr(m.replyTo)] : [],
+<<<<<<< Updated upstream
+=======
           attachments: (m.attachments || []).map((a) => ({
             "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType,
             contentBytes: a.base64,
           })),
+>>>>>>> Stashed changes
         },
         saveToSentItems: true,
       }),
@@ -521,6 +537,8 @@ async function vendorForAsset(db: Db, assetId: string): Promise<Any | null> {
     : null;
 }
 
+<<<<<<< Updated upstream
+=======
 // ---------- daily reports (GoAardvark layouts) ----------
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const NUM1 = "#,##0.0;(#,##0.0)";
@@ -646,6 +664,7 @@ async function reportFailed(db: Db, claimedFrom: string | null, opts: { force?: 
   return { ok: false, error };
 }
 
+>>>>>>> Stashed changes
 async function vendorByToken(db: Db, token: unknown) {
   if (typeof token !== "string" || token.length < 32) throw new HttpErr(404, "This link isn't valid.");
   const { data } = await db.from("pm_vendors").select("id, name, active").eq("portal_token", token).maybeSingle();
@@ -782,8 +801,12 @@ async function handle(req: Request, db: Db, body: Any) {
       }
     }
     const moved = await checkLocations(db, (open || []).filter((x) => ["requested", "proposed", "scheduled"].includes(x.status)), now);
+<<<<<<< Updated upstream
+    return { checked: open?.length ?? 0, sent, location_updates: moved };
+=======
     const reports = await dailyReports(db, {});
     return { checked: open?.length ?? 0, sent, location_updates: moved, daily_reports: reports };
+>>>>>>> Stashed changes
   }
 
   // ---------------- vendor view (one link per vendor) ----------------
@@ -925,12 +948,15 @@ async function handle(req: Request, db: Db, body: Any) {
   const user = await staffUser(req, db);
   if (!user) fail(401, "Sign in to Fleet to do this.");
 
+<<<<<<< Updated upstream
+=======
   // Daily reports, now: to the signed-in user (a test) or to the whole list
   if (action === "reports_send_now") {
     if (body.to !== "list" && !user!.email) fail(400, "Your sign-in has no email address to send the test to.");
     return await dailyReports(db, { force: true, to: body.to === "list" ? undefined : [String(user!.email)] });
   }
 
+>>>>>>> Stashed changes
   if (action === "test_email") {
     const m = layout({
       heading: "Fleet email test",

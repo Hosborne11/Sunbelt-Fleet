@@ -3,7 +3,10 @@ import { Mail, Send } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { pmAction, fmtStamp } from '../lib/pm'
 import PmVendorsSection from '../components/PmVendorsSection'
+<<<<<<< Updated upstream
+=======
 import DailyReportsSection from '../components/DailyReportsSection'
+>>>>>>> Stashed changes
 
 const toList = (text) =>
   text.split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean)
@@ -92,10 +95,13 @@ export default function PmSettingsPage() {
           <PmVendorsSection />
         </div>
 
+<<<<<<< Updated upstream
+=======
         <div className="mt-6">
           <DailyReportsSection />
         </div>
 
+>>>>>>> Stashed changes
         <form onSubmit={save} className="mt-6 space-y-6">
           <section className="space-y-3 rounded border border-graphite-700 px-4 py-4">
             <div className="text-sm font-medium text-ink-100">Foremen</div>

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+<<<<<<< Updated upstream
+import { Plus, Search, Wrench, AlertTriangle, Clock, CalendarX } from 'lucide-react'
+=======
 import { Plus, Search, Wrench, AlertTriangle, Clock, CalendarX, ArrowDown, ArrowUp } from 'lucide-react'
+>>>>>>> Stashed changes
 import { supabase } from '../lib/supabase'
 import { computeDue, needsScheduling, fmtDate, DUE_SOON_HOURS } from '../lib/maintenanceDue'
 import MaintenancePlanDrawer from '../components/MaintenancePlanDrawer'
@@ -111,6 +115,8 @@ export default function MaintenancePlansPage() {
       return true
     })
   }, [enriched, tab, search, requests])
+<<<<<<< Updated upstream
+=======
 
   const sorted = useMemo(() => {
     const val = SORTS[sort.key] || SORTS.hoursLeft
@@ -126,6 +132,7 @@ export default function MaintenancePlansPage() {
       return c * sign
     })
   }, [filtered, sort, requests])
+>>>>>>> Stashed changes
 
   const counts = useMemo(
     () => ({
@@ -255,6 +262,16 @@ export default function MaintenancePlansPage() {
               </colgroup>
               <thead>
                 <tr className="border-b border-graphite-700 bg-graphite-800/60 text-left text-xs uppercase tracking-wide text-ink-500">
+<<<<<<< Updated upstream
+                  <th className="py-2 pl-3 pr-3 font-medium">Plan</th>
+                  <th className="py-2 pr-3 font-medium">Asset</th>
+                  <th className="py-2 pr-3 font-medium">Interval</th>
+                  <th className="py-2 pr-3 font-medium">Last service</th>
+                  <th className="py-2 pr-3 font-medium">Due at</th>
+                  <th className="py-2 pr-3 font-medium">Hours left</th>
+                  <th className="py-2 pr-3 font-medium">Scheduled</th>
+                  <th className="py-2 pr-3 font-medium">Status</th>
+=======
                   {[['plan', 'Plan'], ['asset', 'Asset'], ['interval', 'Interval'], ['last', 'Last service'],
                     ['dueAt', 'Due at'], ['hoursLeft', 'Hours left'], ['scheduled', 'Scheduled'], ['status', 'Status']]
                     .map(([key, label], i) => (
@@ -266,6 +283,7 @@ export default function MaintenancePlansPage() {
                         </button>
                       </th>
                     ))}
+>>>>>>> Stashed changes
                 </tr>
               </thead>
               <tbody>
